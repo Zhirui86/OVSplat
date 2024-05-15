@@ -3,18 +3,17 @@
 # --- Ablation Models ---
 
 #shell for test
-CUDA_VISIBLE_DEVICES=1 ~/miniconda/envs/splat/bin/python -m src.main +experiment=replica \
-checkpointing.load=outputs/2024-03-28/22-48-03/checkpoints/step2000.ckpt \
+CUDA_VISIBLE_DEVICES=3 ~/miniconda/envs/splat/bin/python -m src.main +experiment=scannet \
+checkpointing.load=/data/gyy/mvsplat/outputs/2024-04-09/23-01-16/checkpoints/epoch24997-step250000.ckpt \
 mode=test \
 dataset/view_sampler=evaluation \
 test.compute_scores=true 
 
 #shell for train
-CUDA_VISIBLE_DEVICES=1 ~/miniconda/envs/splat/bin/python -m src.main +experiment=replica \
-checkpointing.load=outputs/2024-03-28/22-48-03/checkpoints/step2000.ckpt \
+CUDA_VISIBLE_DEVICES=1 ~/miniconda/envs/splat/bin/python -m src.main +experiment=scannet \
+checkpointing.load=/data/gyy/lsplat/outputs/2024-05-15/18-22-06/checkpoints/1wstepbyonecycle.ckpt \
 mode=train \
 data_loader.train.batch_size=1
-
 
 
 # Table 3: w/o cost volume

@@ -1,0 +1,17 @@
+name: semantic_generator
+backbone: clip_vitl16_384
+num_features: 256
+dropout: 0.1
+no_scaleinv: true
+no_batchnorm: false
+widehead: false
+widehead_hr: false
+arch_option: 1
+block_depth: 2
+activation: lrelu
+aux: False
+aux_weight: 0.2
+se_loss: False
+se_weight: 0.2
+ignore_index: 20
+use_bn: true

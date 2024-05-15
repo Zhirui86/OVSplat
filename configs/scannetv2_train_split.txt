@@ -1,0 +1,1 @@
+/data/gyy/gpnerf/configs/scannetv2_train_split.txt

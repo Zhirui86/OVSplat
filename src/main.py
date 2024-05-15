@@ -29,7 +29,9 @@ with install_import_hook(
     from src.misc.wandb_tools import update_checkpoint_path
     from src.model.decoder import get_decoder
     from src.model.encoder import get_encoder
-    from src.model.model_wrapper import ModelWrapper
+    # from src.model.lseg import get_semantic_generator
+    from src.model.model import ModelWrapper
+    from src.model.autoencoder.autoencoder import Autoencoder
 
 
 def cyan(text: str) -> str:
@@ -66,7 +68,6 @@ def train(cfg_dict: DictConfig):
             wandb_extra_kwargs.update({'id': cfg_dict.wandb.id,
                                        'resume': "must"})
         logger = WandbLogger(
-            entity=cfg_dict.wandb.entity,
             project=cfg_dict.wandb.project,
             mode=cfg_dict.wandb.mode,
             name=f"{cfg_dict.wandb.name} ({output_dir.parent.name}/{output_dir.name})",
@@ -119,14 +120,25 @@ def train(cfg_dict: DictConfig):
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
     
     encoder, encoder_visualizer = get_encoder(cfg.model.encoder)
-
+    semantic_generator = get_encoder(cfg.model.semantic)
+    autoencoder = Autoencoder(input_channels=512)
+    decoder = get_decoder(cfg.model.decoder, cfg.dataset)
+    
+    # for param in semantic_generator.parameters():
+    #     param.requires_grad = False
+    # for param in encoder.parameters():
+    #     param.requires_grad = False
+    # for param in autoencoder.parameters():
+    #     param.requires_grad = False
     model_wrapper = ModelWrapper(
         cfg.optimizer,
         cfg.test,
         cfg.train,
         encoder,
         encoder_visualizer,
-        get_decoder(cfg.model.decoder, cfg.dataset),
+        semantic_generator,
+        autoencoder,
+        decoder,
         get_losses(cfg.loss),
         step_tracker
     )
@@ -138,50 +150,116 @@ def train(cfg_dict: DictConfig):
     )
 
     # 检查load的ckpt是否保存优化器状态
-    ckpt = torch.load(checkpoint_path)
-    if not 'optimizer_states' in ckpt :
-        model = ModelWrapper(
-            cfg.optimizer,
-            cfg.test,
-            cfg.train,
-            encoder,
-            encoder_visualizer,
-            get_decoder(cfg.model.decoder, cfg.dataset),
-            get_losses(cfg.loss),
-            step_tracker
-        )
-        model2 = ModelWrapper(
-            cfg.optimizer,
-            cfg.test,
-            cfg.train,
-            encoder,
-            encoder_visualizer,
-            get_decoder(cfg.model.decoder, cfg.dataset),
-            get_losses(cfg.loss),
-            step_tracker
-        )
+    # ckpt = torch.load(checkpoint_path)
+    # if not 'optimizer_states' in ckpt :
+    #     model = ModelWrapper(
+    #         cfg.optimizer,
+    #         cfg.test,
+    #         cfg.train,
+    #         encoder,
+    #         encoder_visualizer,
+    #         get_decoder(cfg.model.decoder, cfg.dataset),
+    #         get_losses(cfg.loss),
+    #         step_tracker
+    #     )
+    #     model2 = ModelWrapper(
+    #         cfg.optimizer,
+    #         cfg.test,
+    #         cfg.train,
+    #         encoder,
+    #         encoder_visualizer,
+    #         get_decoder(cfg.model.decoder, cfg.dataset),
+    #         get_losses(cfg.loss),
+    #         step_tracker
+    #     )
 
-        ckpt_saved = torch.load("outputs/2024-03-26/10-49-14/checkpoints/step60000.ckpt")
-        model.load_state_dict(ckpt_saved['state_dict'], strict=False)
-        optimizer_state_dict = ckpt_saved['optimizer_states'][0]  # 选择第一个优化器状态
-        scheduler_state_dict = ckpt_saved['lr_schedulers'][0]  # 选择第一个学习率调度器状态
+        # ckpt_saved = torch.load("/data/gyy/mvsplat/outputs/2024-04-07/23-01-01/checkpoints/epoch10998-step110000.ckpt")
+        # model.load_state_dict(ckpt_saved['state_dict'], strict=False)
+        # optimizer_state_dict = ckpt_saved['optimizer_states'][0]  # 选择第一个优化器状态
+        # scheduler_state_dict = ckpt_saved['lr_schedulers'][0]  # 选择第一个学习率调度器状态
 
-        model2.load_state_dict(ckpt['state_dict'], strict=False)
+        # model2.load_state_dict(ckpt['state_dict'], strict=False)
 
-        # 将第一个ckpt文件中的优化器状态和学习率调度器状态加载到第二个模型中
-        optimizer = torch.optim.Adam(model2.parameters(), lr=0.001)  # 重新创建优化器
-        optimizer.load_state_dict(optimizer_state_dict)
-        model2.optimizer = optimizer
+        # # 将第一个ckpt文件中的优化器状态和学习率调度器状态加载到第二个模型中
+        # optimizer = torch.optim.Adam(model2.parameters(), lr=0.001)  # 重新创建优化器
+        # optimizer.load_state_dict(optimizer_state_dict)
+        # model2.optimizer = optimizer
 
-        model2_state_dict = model2.state_dict()
-        checkpoint = {
-            'state_dict': model2_state_dict,
-            'optimizer_states': [model2.optimizer.state_dict()],
-            'lr_schedulers': [scheduler_state_dict],
-            'pytorch-lightning_version': '2.0.0'
-        }
+        # model2_state_dict = model2.state_dict()
+        # checkpoint = {
+        #     'state_dict': model2_state_dict,
+        #     'optimizer_states': [model2.optimizer.state_dict()],
+        #     'lr_schedulers': [scheduler_state_dict],
+        #     'pytorch-lightning_version': '2.0.0'
+        # }
 
-        torch.save(checkpoint, checkpoint_path)
+        # torch.save(checkpoint, checkpoint_path)
+
+    # checkpoint_path2 = "checkpoints/demo_e200.ckpt"
+    # if checkpoint_path and checkpoint_path2 :
+    #     ckpt1 = torch.load(checkpoint_path, map_location='cpu')
+    #     ckpt2 = torch.load(checkpoint_path2, map_location='cpu')
+    #     model_state_dict1 = ckpt1['state_dict']
+    #     model_state_dict2 = ckpt2['state_dict']
+    #     model_state_dict2 = {"semantic_generator." + k:v for k,v in model_state_dict2.items()}
+
+    #     current_model_state = model_wrapper.state_dict()
+    #     current_model_keys = set(model_wrapper.state_dict().keys())
+    #     loaded_keys1 = set(model_state_dict1.keys())
+    #     loaded_keys2 = set(model_state_dict2.keys())
+
+    #     # 只保留当前模型存在的键的权重
+    #     common_keys1 = current_model_keys & loaded_keys1
+    #     filtered_state_dict = {k: v for k, v in model_state_dict1.items() if k in common_keys1}
+    #     for k,v in filtered_state_dict.items():
+    #         current_model_state[k] = v
+    #     # 删去键名称中的semantic_generator
+    #     common_keys2 = current_model_keys & loaded_keys2
+    #     filtered_state_dict = {k: v for k, v in model_state_dict2.items() if k in common_keys2}
+    #     for k,v in filtered_state_dict.items():
+    #         current_model_state[k] = v
+
+    #     lr_dict ={
+    #         "encoder": 1.5e-5,
+    #         "semantic_generator": 1.5e-4,
+    #         "autoencoder": 1.5e-3
+    #     }
+    #     param_groups = {
+    #         'encoder': [],
+    #         'semantic_generator': [],
+    #         'autoencoder': []
+    #     }
+    #     for name, param in model_wrapper.named_parameters():
+    #         if name.startswith('encoder'):
+    #             param_groups['encoder'].append(param)
+    #         elif name.startswith('semantic_generator'):
+    #             param_groups['semantic_generator'].append(param)    
+    #         else:
+    #             param_groups['autoencoder'].append(param)
+    #     params = [
+    #         {'params': param_groups['encoder'], 'lr': lr_dict['encoder']},
+    #         {'params': param_groups['semantic_generator'], 'lr': lr_dict['semantic_generator']},
+    #         {'params': param_groups['autoencoder'], 'lr': lr_dict['autoencoder']}
+    #     ]
+
+    #     optimizer = torch.optim.Adam(params, lr=1.5e-5, betas=(0.9, 0.999), weight_decay=0.0001)
+
+    #     warm_up_steps = 2000
+    #     warm_up = torch.optim.lr_scheduler.LinearLR(
+    #             optimizer,
+    #             1 / warm_up_steps,
+    #             1,
+    #             total_iters=warm_up_steps,
+    #     )
+
+    #     checkpoint = {
+    #         'state_dict': current_model_state,
+    #         'optimizer_states': [optimizer.state_dict()],
+    #         'lr_schedulers': [warm_up.state_dict()],
+    #         'pytorch-lightning_version': '2.0.0'
+    #     }
+        
+    #     torch.save(checkpoint, "checkpoints/state_saver.ckpt")
 
     if cfg.mode == "train":
         trainer.fit(model_wrapper, datamodule=data_module, ckpt_path=checkpoint_path)

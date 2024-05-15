@@ -9,11 +9,18 @@ from diff_gaussian_rasterization import (
 from einops import einsum, rearrange, repeat
 from jaxtyping import Float
 from torch import Tensor
-
+from dataclasses import dataclass
 from ...geometry.projection import get_fov, homogenize_points
 from ..encoder.costvolume.conversions import depth_to_relative_disparity
+from ...dataset.sh_utils import eval_sh
 
-
+@dataclass
+class RenderOutput:
+    color: Float[Tensor, "batch 3 height width"] | None
+    feature: Float[Tensor, "batch channels height width"] | None
+    mask: Float[Tensor, "batch height width"]
+    depth: Float[Tensor, "batch height width"]
+    
 def get_projection_matrix(
     near: Float[Tensor, " batch"],
     far: Float[Tensor, " batch"],
@@ -45,19 +52,20 @@ def get_projection_matrix(
 
 
 def render_cuda(
-    extrinsics: Float[Tensor, "batch 4 4"],
-    intrinsics: Float[Tensor, "batch 3 3"],
-    near: Float[Tensor, " batch"],
-    far: Float[Tensor, " batch"],
-    image_shape: tuple[int, int],
-    background_color: Float[Tensor, "batch 3"],
-    gaussian_means: Float[Tensor, "batch gaussian 3"],
-    gaussian_covariances: Float[Tensor, "batch gaussian 3 3"],
-    gaussian_sh_coefficients: Float[Tensor, "batch gaussian 3 d_sh"],
-    gaussian_opacities: Float[Tensor, "batch gaussian"],
+    extrinsics,
+    intrinsics,
+    near,
+    far,
+    image_shape,
+    background_color,
+    gaussian_means,
+    gaussian_covariances,
+    gaussian_sh_coefficients,
+    gaussian_opacities,
+    feat_harmonics,
     scale_invariant: bool = True,
     use_sh: bool = True,
-) -> Float[Tensor, "batch 3 height width"]:
+) :
     assert use_sh or gaussian_sh_coefficients.shape[-1] == 1
 
     # Make sure everything is in a range where numerical issues don't appear.
@@ -73,7 +81,19 @@ def render_cuda(
     _, _, _, n = gaussian_sh_coefficients.shape
     degree = isqrt(n) - 1
     shs = rearrange(gaussian_sh_coefficients, "b g xyz n -> b g n xyz").contiguous()
-
+    campos = extrinsics[:, :3, 3]
+    dir_pp = gaussian_means - campos.unsqueeze(1)
+    dir_pp_normalized = dir_pp/dir_pp.norm(dim=-1, keepdim=True)
+    
+    if feat_harmonics is not None:
+        features = 0.5 + eval_sh(
+            isqrt(feat_harmonics.shape[-1]) - 1, 
+            feat_harmonics, 
+            dir_pp_normalized
+        )
+    else:
+        features = None
+    
     b, _, _ = extrinsics.shape
     h, w = image_shape
 
@@ -87,7 +107,8 @@ def render_cuda(
     full_projection = view_matrix @ projection_matrix
 
     all_images = []
-    all_radii = []
+    all_lang_features = []
+
     for i in range(b):
         # Set up a tensor for the gradients of the screen-space means.
         mean_gradients = torch.zeros_like(gaussian_means[i], requires_grad=True)
@@ -109,24 +130,29 @@ def render_cuda(
             campos=extrinsics[i, :3, 3],
             prefiltered=False,  # This matches the original usage.
             debug=False,
+            include_feature=True if feat_harmonics is not None else False
         )
         rasterizer = GaussianRasterizer(settings)
 
         row, col = torch.triu_indices(3, 3)
 
-        image, radii = rasterizer(
+        image, feature, radii = rasterizer(
             means3D=gaussian_means[i],
             means2D=mean_gradients,
             shs=shs[i] if use_sh else None,
             colors_precomp=None if use_sh else shs[i, :, 0, :],
+            language_feature_precomp=features[i]/(features[i].norm(dim=-1,keepdim=True)+1e-9)
+            if features is not None else None,
             opacities=gaussian_opacities[i, ..., None],
             cov3D_precomp=gaussian_covariances[i, :, row, col],
         )
+       
         all_images.append(image)
-        all_radii.append(radii)
-    return torch.stack(all_images)
+        all_lang_features.append(feature)
 
-
+    
+    return torch.stack(all_images), torch.stack(all_lang_features)
+        
 def render_cuda_orthographic(
     extrinsics: Float[Tensor, "batch 4 4"],
     width: Float[Tensor, " batch"],
@@ -232,6 +258,7 @@ def render_depth_cuda(
     gaussian_means: Float[Tensor, "batch gaussian 3"],
     gaussian_covariances: Float[Tensor, "batch gaussian 3 3"],
     gaussian_opacities: Float[Tensor, "batch gaussian"],
+    feat_harmonics: Float[Tensor, "batch gaussian channel feat_d_sh"],
     scale_invariant: bool = True,
     mode: DepthRenderingMode = "depth",
 ) -> Float[Tensor, "batch height width"]:
@@ -252,7 +279,7 @@ def render_depth_cuda(
 
     # Render using depth as color.
     b, _ = fake_color.shape
-    result = render_cuda(
+    result, feat = render_cuda(
         extrinsics,
         intrinsics,
         near,
@@ -263,6 +290,7 @@ def render_depth_cuda(
         gaussian_covariances,
         repeat(fake_color, "b g -> b g c ()", c=3),
         gaussian_opacities,
+        feat_harmonics,
         scale_invariant=scale_invariant,
     )
     return result.mean(dim=1)

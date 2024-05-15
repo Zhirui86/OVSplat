@@ -1,2 +1,4 @@
-- +experiment=re10k
-- data_loader.train.batch_size=3
+- +experiment=scannet
+- checkpointing.load=/data/gyy/lsplat/checkpoints/view2step160000.ckpt
+- mode=train
+- data_loader.train.batch_size=1

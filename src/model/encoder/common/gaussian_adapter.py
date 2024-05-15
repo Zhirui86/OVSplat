@@ -55,7 +55,7 @@ class GaussianAdapter(nn.Module):
         raw_gaussians: Float[Tensor, "*#batch _"],
         image_shape: tuple[int, int],
         eps: float = 1e-8,
-    ) -> Gaussians:
+    ):
         device = extrinsics.device
         scales, rotations, sh = raw_gaussians.split((3, 4, 3 * self.d_sh), dim=-1)
 
@@ -93,7 +93,7 @@ class GaussianAdapter(nn.Module):
             # exporting Gaussians to ply files. This needs to be fixed...
             scales=scales,
             rotations=rotations.broadcast_to((*scales.shape[:-1], 4)),
-        )
+        ), c2w_rotations
 
     def get_scale_multiplier(
         self,

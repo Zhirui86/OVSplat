@@ -1,17 +1,17 @@
 dataset:
   view_sampler:
     name: bounded
-    num_target_views: 4
+    num_target_views: 1
     num_context_views: 2
-    min_distance_between_context_views: 45
-    max_distance_between_context_views: 192
+    min_distance_between_context_views: 2
+    max_distance_between_context_views: 6
     min_distance_to_context_views: 0
-    warm_up_steps: 150000
-    initial_min_distance_between_context_views: 25
-    initial_max_distance_between_context_views: 45
-  name: re10k
+    warm_up_steps: 0
+    initial_min_distance_between_context_views: 2
+    initial_max_distance_between_context_views: 6
+  name: scannet
   roots:
-  - datasets/re10k
+  - datasets/scannet
   make_baseline_1: false
   augment: true
   image_shape:
@@ -76,6 +76,37 @@ model:
     wo_backbone_cross_attn: false
     wo_cost_volume_refine: false
     use_epipolar_trans: false
+  semantic:
+    name: semantic_generator
+    backbone: clip_vitl16_384
+    num_features: 256
+    dropout: 0.1
+    no_scaleinv: true
+    no_batchnorm: false
+    widehead: false
+    widehead_hr: false
+    arch_option: 1
+    block_depth: 2
+    activation: lrelu
+    aux: false
+    aux_weight: 0.2
+    se_loss: false
+    se_weight: 0.2
+    ignore_index: 20
+    use_bn: true
+  autoencoder:
+    name: autoencoder
+    encoder_hidden_dims:
+    - 256
+    - 128
+    - 64
+    - 32
+    decoder_hidden_dims:
+    - 64
+    - 128
+    - 256
+    - 256
+    - 512
   decoder:
     name: splatting_cuda
 loss:
@@ -85,20 +116,19 @@ loss:
     weight: 0.1
     apply_after_step: 0
 wandb:
-  project: mvsplat
-  entity: 2053238694
-  name: re10k
-  mode: disabled
+  project: ovsplat
+  name: scannet
+  mode: online
   id: null
   tags:
-  - re10k
+  - scannet
   - 256x256
 mode: train
 data_loader:
   train:
     num_workers: 10
     persistent_workers: true
-    batch_size: 3
+    batch_size: 1
     seed: 1234
   test:
     num_workers: 4
@@ -111,16 +141,16 @@ data_loader:
     batch_size: 1
     seed: 3456
 optimizer:
-  lr: 0.00015
+  lr: 1.5e-6
   warm_up_steps: 2000
-  cosine_lr: false
+  cosine_lr: True
 checkpointing:
-  load: null
-  every_n_train_steps: 20000
+  load: /data/gyy/lsplat/checkpoints/view2step160000.ckpt
+  every_n_train_steps: 10000
   save_top_k: -1
   pretrained_model: null
 train:
-  depth_mode: null
+  depth_mode: depth
   extended_visualization: false
   print_log_every_n_steps: 1
 test:

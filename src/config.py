@@ -8,8 +8,9 @@ from omegaconf import DictConfig, OmegaConf
 from .dataset.data_module import DataLoaderCfg, DatasetCfg
 from .loss import LossCfgWrapper
 from .model.decoder import DecoderCfg
-from .model.encoder import EncoderCfg
-from .model.model_wrapper import OptimizerCfg, TestCfg, TrainCfg
+from .model.encoder import EncoderCfg, SemanticCfg, autoencodercfg
+from .model.model import OptimizerCfg, TestCfg, TrainCfg
+from .model.autoencoder.autoencoder import AutoencoderCfg
 
 
 @dataclass
@@ -24,6 +25,8 @@ class CheckpointingCfg:
 class ModelCfg:
     decoder: DecoderCfg
     encoder: EncoderCfg
+    semantic: SemanticCfg
+    autoencoder: autoencodercfg
 
 
 @dataclass

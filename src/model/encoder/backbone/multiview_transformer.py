@@ -143,6 +143,13 @@ def single_head_split_window_attention(
             channel_last=True,
         )  # [B, H, W, C]
 
+        # #尝试对attn进行merge_splits
+        # attn = merge_splits(
+        #     attn.view(b_new, h // num_splits, w // num_splits, c),
+        #     num_splits=num_splits,
+        #     channel_last=True,
+        # )
+
         # shift back
         if with_shift:
             out = torch.roll(out, shifts=(shift_size_h, shift_size_w), dims=(1, 2))
@@ -201,6 +208,8 @@ def single_head_split_window_attention(
             channel_last=True,
         )  # [B, H, W, C]
 
+        #尝试对attn进行merge_splits
+       
         # shift back
         if with_shift:
             out = torch.roll(out, shifts=(shift_size_h, shift_size_w), dims=(1, 2))

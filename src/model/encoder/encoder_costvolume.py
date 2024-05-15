@@ -26,6 +26,7 @@ from .epipolar.epipolar_sampler import EpipolarSampler
 from ..encodings.positional_encoding import PositionalEncoding
 
 
+
 @dataclass
 class OpacityMappingCfg:
     initial: float
@@ -71,7 +72,8 @@ class EncoderCostVolume(Encoder[EncoderCostVolumeCfg]):
         # multi-view Transformer backbone
         if cfg.use_epipolar_trans:
             self.epipolar_sampler = EpipolarSampler(
-                num_views=get_cfg().dataset.view_sampler.num_context_views,
+                # num_views=get_cfg().num_source_views,
+                num_views=2,
                 num_samples=32,
             )
             self.depth_encoding = nn.Sequential(
@@ -114,7 +116,7 @@ class EncoderCostVolume(Encoder[EncoderCostVolumeCfg]):
             costvolume_unet_attn_res=tuple(cfg.costvolume_unet_attn_res),
             gaussian_raw_channels=cfg.num_surfaces * (self.gaussian_adapter.d_in + 2),
             gaussians_per_pixel=cfg.gaussians_per_pixel,
-            num_views=5,
+            num_views=2,
             depth_unet_feat_dim=cfg.depth_unet_feat_dim,
             depth_unet_attn_res=cfg.depth_unet_attn_res,
             depth_unet_channel_mult=cfg.depth_unet_channel_mult,
@@ -145,7 +147,7 @@ class EncoderCostVolume(Encoder[EncoderCostVolumeCfg]):
         deterministic: bool = False,
         visualization_dump: Optional[dict] = None,
         scene_names: Optional[list] = None,
-    ) -> Gaussians:
+    ) :
         device = context["image"].device
         b, v, _, h, w = context["image"].shape
 
@@ -174,7 +176,7 @@ class EncoderCostVolume(Encoder[EncoderCostVolumeCfg]):
         extra_info['images'] = rearrange(context["image"], "b v c h w -> (v b) c h w")
         extra_info["scene_names"] = scene_names
         gpp = self.cfg.gaussians_per_pixel
-        depths, densities, raw_gaussians = self.depth_predictor(
+        depths, densities, raw_gaussians, refine_out = self.depth_predictor(
             in_feats,
             context["intrinsics"],
             context["extrinsics"],
@@ -198,7 +200,7 @@ class EncoderCostVolume(Encoder[EncoderCostVolumeCfg]):
         pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
         xy_ray = xy_ray + (offset_xy - 0.5) * pixel_size
         gpp = self.cfg.gaussians_per_pixel
-        gaussians = self.gaussian_adapter.forward(
+        gaussians, c2w_rotations = self.gaussian_adapter.forward(
             rearrange(context["extrinsics"], "b v i j -> b v () () () i j"),
             rearrange(context["intrinsics"], "b v i j -> b v () () () i j"),
             rearrange(xy_ray, "b v r srf xy -> b v r srf () xy"),
@@ -235,15 +237,15 @@ class EncoderCostVolume(Encoder[EncoderCostVolumeCfg]):
                 gaussians.covariances,
                 "b v r srf spp i j -> b (v r srf spp) i j",
             ),
-            rearrange(
+             rearrange(
                 gaussians.harmonics,
-                "b v r srf spp c d_sh -> b (v r srf spp) c d_sh",
+                "b v r srf spp c d_c_sh -> b (v r srf spp) c d_c_sh",
             ),
             rearrange(
                 opacity_multiplier * gaussians.opacities,
                 "b v r srf spp -> b (v r srf spp)",
-            ),
-        )
+            )
+        ), c2w_rotations
 
     def get_data_shim(self) -> DataShim:
         def data_shim(batch: BatchedExample) -> BatchedExample:

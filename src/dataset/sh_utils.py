@@ -22,7 +22,13 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+from math import isqrt
 
+import torch
+from e3nn.o3 import matrix_to_angles, wigner_D
+from einops import einsum
+from jaxtyping import Float
+from torch import Tensor
 C0 = 0.28209479177387814
 C1 = 0.4886025119029199
 C2 = [
@@ -110,6 +116,28 @@ def eval_sh(deg, sh, dirs):
                             C4[7] * xz * (xx - 3 * yy) * sh[..., 23] +
                             C4[8] * (xx * (xx - 3 * yy) - yy * (3 * xx - yy)) * sh[..., 24])
     return result
+
+def rotate_sh(
+    sh_coefficients: Float[Tensor, "*#batch n"],
+    rotations: Float[Tensor, "*#batch 3 3"],
+) -> Float[Tensor, "*batch n"]:
+    device = sh_coefficients.device
+    dtype = sh_coefficients.dtype
+
+    *_, n = sh_coefficients.shape
+    alpha, beta, gamma = matrix_to_angles(rotations)
+    result = []
+    for degree in range(isqrt(n)):
+        with torch.device(device):
+            sh_rotations = wigner_D(degree, alpha, beta, gamma).type(dtype)
+        sh_rotated = einsum(
+            sh_rotations,
+            sh_coefficients[..., degree**2 : (degree + 1) ** 2],
+            "... i j, ... j -> ... i",
+        )
+        result.append(sh_rotated)
+
+    return torch.cat(result, dim=-1)
 
 def RGB2SH(rgb):
     return (rgb - 0.5) / C0

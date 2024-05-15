@@ -2,7 +2,7 @@ import numpy as np
 
 
 # From https://github.com/open-mmlab/mmdetection3d/blob/fcb4545ce719ac121348cab59bac9b69dd1b1b59/mmdet3d/datasets/scannet_dataset.py
-class PointSegClassMapping(object):
+class  PointSegClassMapping(object):
     """Map original semantic class to valid category ids.
     Map valid classes as 0~len(valid_cat_ids)-1 and
     others as len(valid_cat_ids).
@@ -21,6 +21,8 @@ class PointSegClassMapping(object):
 
         # build cat_id to class index mapping
         neg_cls = len(valid_cat_ids)
+        # neg_cls = -1
+
         self.cat_id2class = np.ones(
             self.max_cat_id + 1, dtype=int) * neg_cls
         for cls_idx, cat_id in enumerate(valid_cat_ids):
